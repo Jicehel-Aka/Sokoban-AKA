@@ -1,0 +1,15 @@
+build/
+build-*/
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
+__pycache__/
+*.pyc
+# generated at release time by tools/make_sd_audio.py music (~40 MB)
+SD_files/SOKOBAN/music/*.wav
+# files written while playing from the source tree
+SD_files/SOKOBAN/CFG.DAT
+SD_files/SOKOBAN/PROGRESS.DAT
+SD_files/SOKOBAN/mylevels/*.sok
+SD_files/SOKOBAN/SHOT*.BMP

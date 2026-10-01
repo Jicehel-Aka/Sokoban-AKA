@@ -1,0 +1,10 @@
+Gamebuino-AKA library
+Copyright (c) Gamebuino 2026 - Author: Jean-Marie Papillon
+
+Licensed under the GNU Lesser General Public License, version 3 or (at your option) any later
+version (see the header of each source file). Full texts: ../../THIRD_PARTY/LGPL-3.0.txt and
+../../THIRD_PARTY/GPL-3.0.txt.
+
+Sokoban for Gamebuino AKA uses this library as a component and links it unmodified (additions listed
+in ../../CREDITS.md). The corresponding source is this very directory. font8x8_basic.h is public
+domain (Daniel Hepper).

@@ -1,0 +1,11 @@
+# Plays the first built-in level through the real UI: title -> packs -> pack -> level -> one push.
+# After the run, PROGRESS.DAT must say that level 2 of "Initiation" is unlocked (checked by run_tests.sh).
+# frame command argument
+10 tap a
+30 tap a
+50 tap a
+80 tap right
+120 shot solved.bmp
+140 tap a
+170 shot level2.bmp
+200 quit

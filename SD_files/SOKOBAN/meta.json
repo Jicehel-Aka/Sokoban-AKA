@@ -1,0 +1,7 @@
+{
+  "title": "Sokoban",
+  "description": "Portage sur Gamebuino AKA de Sokoban (GP2X) de Willems Davy (joyrider3774). Pousse les caisses sur les cibles : 19 packs de niveaux .sok (1963 niveaux) et 6 niveaux d'initiation, editeur de niveaux, annulation/refaire, musique et bruitages, 5 langues. Jeu original MIT (c) Willems Davy ; graphismes, musiques et niveaux sous leurs licences d'origine : voir CREDITS.md.",
+  "author": "Jicehel (portage) - original: Willems Davy (joyrider3774)",
+  "version": "1.0",
+  "date": "2026-10-01"
+}

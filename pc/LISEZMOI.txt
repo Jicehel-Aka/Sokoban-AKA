@@ -1,0 +1,18 @@
+Sokoban (version PC) - portage Gamebuino AKA de Sokoban (GP2X) de Willems Davy
+==============================================================================
+
+Lancer :   sokoban.exe (Windows)     ./sokoban (Linux : sudo apt install libsdl2-2.0-0)
+
+Le dossier SOKOBAN (niveaux, sons, musique) doit rester a cote de l'executable.
+La progression et les reglages sont ecrits dans ce dossier (ou dans ~/.sokoban-aka si le dossier
+est en lecture seule).
+
+Commandes   : fleches ; Entree/Espace/Z = valider (en jeu : refaire) ; Retour arriere/X = retour
+              (en jeu : annuler) ; C = recommencer ; A / R = piste precedente / suivante ;
+              Echap ou M = pause (maintenu 1 s : capture d'ecran) ; F11 plein ecran ; Ctrl+Q quitter.
+              Manette : croix + boutons A/B/X/Y, Back = menu, Start = RUN (Start+Back 0,5 s = quitter).
+Options     : --scale N   --fullscreen   --data DIR   --save DIR   --help
+
+Editeur de niveaux : ecran titre > Editeur ; les packs crees sont dans SOKOBAN/mylevels/.
+Ajouter des niveaux : copier des fichiers .sok dans SOKOBAN/levelpacks/.
+Licences et remerciements : CREDITS.md et dossier THIRD_PARTY.

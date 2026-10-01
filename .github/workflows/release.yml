@@ -1,0 +1,222 @@
+name: Build and release
+
+# UN SEUL workflow. A chaque mise a jour de la branche principale, il compile :
+#   - AKA     : firmware ESP-IDF 5.5.1, empaquete en dossier carte SD pret a copier (SOKOBAN/)
+#   - Linux   : version SDL2 + tests (moteur, parcours scripte de l'interface)
+#   - Windows : version SDL2 (MSYS2 / MinGW-w64, SDL2.dll fournie)
+# puis publie une Release GitHub en incrementant la version MINEURE (v1.4.2 -> v1.5.0).
+# Rien n'est publie si une des compilations (ou des tests) echoue.
+#
+# Pull request : les compilations tournent, sans release. Declenchement manuel : compile et publie.
+#
+# PREREQUIS : la bibliotheque `gamebuino` doit etre dans components/gamebuino (elle y est deja dans
+# ce depot) ; sa correction de casse est appliquee ici par tools/fix_gamebuino_case.py.
+#
+# La musique (~40 Mo de WAV) n'est pas dans le depot : elle est generee ici a partir des .ogg
+# d'origine (assets/music) par tools/make_sd_audio.py, au format que la AKA sait lire.
+
+on:
+  push:
+    branches: [main, master]
+    paths-ignore: ['**.md', 'LICENSE', '.gitignore']
+  pull_request:
+    paths-ignore: ['**.md', 'LICENSE', '.gitignore']
+  workflow_dispatch:
+
+permissions:
+  contents: write # creer la Release et y attacher les fichiers
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }} # jamais d'annulation d'une release en cours
+
+jobs:
+  # ---------------------------------------------------------------- AKA
+  aka:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove stale build cache
+        run: rm -rf build
+
+      - name: Check gamebuino component
+        run: |
+          if [ ! -d components/gamebuino ]; then
+            echo "::error::components/gamebuino est absent : copiez la bibliotheque gamebuino dans components/ (voir README)"
+            exit 1
+          fi
+          python3 tools/fix_gamebuino_case.py components/gamebuino
+
+      - name: Build with ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.1
+          target: esp32s3
+          path: '.'
+
+      - name: Convert the music
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python3 tools/make_sd_audio.py music
+
+      # firmware.bin = le nom attendu par le loader AKA. Le bootloader et la table de partitions ne
+      # sont volontairement PAS publies : les flasher ecraserait le loader de la console.
+      # SD_files/SOKOBAN/ : meta.json, Picture.png, screen.bmp, levelpacks/, sound/, music/ -> dossier
+      # SOKOBAN a la racine de la carte SD. Les licences sont copiees a cote (obligation CC BY / MIT).
+      - name: Package
+        run: |
+          test -f build/sokoban.bin
+          mkdir -p out/SOKOBAN
+          cp -r SD_files/SOKOBAN/. out/SOKOBAN/
+          cp build/sokoban.bin out/SOKOBAN/firmware.bin
+          cp build/sokoban.bin firmware.bin
+          cp LICENSE CREDITS.md out/SOKOBAN/
+          cp -r THIRD_PARTY out/SOKOBAN/
+          (cd out && zip -r ../sokoban-aka-sdcard.zip SOKOBAN)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aka
+          path: |
+            firmware.bin
+            sokoban-aka-sdcard.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------------------------------------------------------------- PC (Windows + Linux)
+  pc:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux-x64
+          - os: windows-latest
+            name: windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Linux : compilation (warnings = erreurs), tests, paquet ---
+      - name: Build and test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev ffmpeg
+          cmake -S pc -B build-pc -DCMAKE_BUILD_TYPE=Release -DSOKOBAN_PC_WERROR=ON
+          cmake --build build-pc -j"$(nproc)"
+          tests/run_tests.sh build-pc/sokoban
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python3 tools/make_sd_audio.py music
+          mkdir -p package
+          cp build-pc/sokoban package/
+          cp -r SD_files/SOKOBAN package/SOKOBAN
+          cp LICENSE CREDITS.md pc/LISEZMOI.txt package/
+          cp -r THIRD_PARTY package/
+          (cd package && zip -r ../sokoban-pc-${{ matrix.name }}.zip .)
+
+      # --- Windows : MinGW-w64 via MSYS2. Le runtime GCC est lie statiquement ; SDL2.dll (et toute
+      # autre DLL mingw64 dont depend l'executable) est copiee a cote. ---
+      - name: Set up MSYS2 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-SDL2 mingw-w64-x86_64-ffmpeg mingw-w64-x86_64-python zip
+
+      - name: Build and test (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          cmake -S pc -B build-pc -G Ninja -DCMAKE_BUILD_TYPE=Release -DSOKOBAN_PC_STATIC=ON -DSOKOBAN_PC_WERROR=ON
+          cmake --build build-pc
+          tests/run_tests.sh build-pc/sokoban.exe
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          python tools/make_sd_audio.py music
+          mkdir -p package
+          cp build-pc/sokoban.exe package/
+          for dll in $(ldd build-pc/sokoban.exe | awk '/mingw64/ {print $3}'); do cp "$dll" package/; done
+          cp -r SD_files/SOKOBAN package/SOKOBAN
+          cp LICENSE CREDITS.md pc/LISEZMOI.txt package/
+          cp -r THIRD_PARTY package/
+          (cd package && zip -r ../sokoban-pc-${{ matrix.name }}.zip .)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pc-${{ matrix.name }}
+          path: sokoban-pc-${{ matrix.name }}.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------------------------------------------------------------- Release
+  release:
+    if: github.event_name != 'pull_request'
+    needs: [aka, pc]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tous les tags, pour calculer la version suivante
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Next minor version
+        id: version
+        run: |
+          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          last=${last:-v0.0.0}
+          IFS=. read -r major minor _ <<< "${last#v}"
+          echo "tag=v${major}.$((minor + 1)).0" >> "$GITHUB_OUTPUT"
+
+      # firmware.bin garde son nom (le loader l'attend tel quel) ; les zips recoivent la version.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          cd artifacts
+          for f in sokoban-*.zip; do mv "$f" "${f%.zip}-${TAG}.zip"; done
+          ls -l
+          cat > ../notes.md <<'NOTES'
+          Sokoban pour Gamebuino AKA et PC (SDL2) - portage de *Sokoban (GP2X)* de Willems Davy (joyrider3774), licence MIT.
+
+          - `sokoban-aka-sdcard-*.zip` : dossier `SOKOBAN` a copier a la racine de la carte SD de la AKA (contient `firmware.bin`).
+          - `firmware.bin` : le firmware seul.
+          - `sokoban-pc-linux-x64-*.zip` / `sokoban-pc-windows-x64-*.zip` : version PC (Linux : necessite `libsdl2-2.0-0`).
+
+          Les graphismes, musiques, sons et niveaux gardent leurs licences d'origine (CC BY, CC BY-SA, CC0...) :
+          voir `CREDITS.md`, joint a chaque archive.
+          NOTES
+          gh release create "$TAG" firmware.bin sokoban-*.zip \
+            --target "$GITHUB_SHA" --title "Sokoban $TAG" --notes-file ../notes.md --generate-notes
+
+      # Optionnel : prévient le dépôt "AKA Toolkit" qu'une nouvelle release est disponible ici.
+      # Nécessite un secret TOOLKIT_DISPATCH_TOKEN ; sans lui, cette étape est ignorée (`|| true`).
+      - name: Notify AKA Toolkit (optional)
+        if: always() && env.TOOLKIT_DISPATCH_TOKEN != ''
+        env:
+          TOOLKIT_DISPATCH_TOKEN: ${{ secrets.TOOLKIT_DISPATCH_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: token $TOOLKIT_DISPATCH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/Jicehel-Aka/AKA-Toolkit/dispatches" \
+            -d '{"event_type":"aka-source-released","client_payload":{"repo":"'"$GH_REPO"'","tag":"'"$TAG"'"}}' \
+            || true
