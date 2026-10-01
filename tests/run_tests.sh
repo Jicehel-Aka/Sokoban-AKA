@@ -20,6 +20,9 @@ g++ -std=c++17 -O2 -Wall -Wextra -I"$ROOT/main" -I"$ROOT/main/engine" -o "$TMP/e
 
 BIN="${1:-}"
 if [ -n "$BIN" ]; then
+  # The runs below happen in a temporary directory (cd): a relative path would no longer resolve.
+  BIN="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
+  [ -f "$BIN" ] || [ -f "$BIN.exe" ] || { echo "binary not found: $BIN" >&2; exit 1; }
   echo "== scripted UI run"
   export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
   export SOKOBAN_DATA="$ROOT/SD_files/SOKOBAN" SOKOBAN_SAVE="$TMP/save"
