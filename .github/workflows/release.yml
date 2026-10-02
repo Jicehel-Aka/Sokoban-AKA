@@ -107,15 +107,15 @@ jobs:
           sudo apt-get install -y libsdl2-dev ffmpeg
           cmake -S pc -B build-pc -DCMAKE_BUILD_TYPE=Release -DSOKOBAN_PC_WERROR=ON
           cmake --build build-pc -j"$(nproc)"
-          tests/run_tests.sh build-pc/sokoban
+          bash tests/run_tests.sh build-pc/sokoban
 
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: |
           python3 tools/make_sd_audio.py music
           mkdir -p package
-          cp build-pc/sokoban package/
           cp -r SD_files/SOKOBAN package/SOKOBAN
+          cp build-pc/sokoban package/
           cp LICENSE CREDITS.md pc/LISEZMOI.txt package/
           cp -r THIRD_PARTY package/
           (cd package && zip -r ../sokoban-pc-${{ matrix.name }}.zip .)
@@ -137,7 +137,7 @@ jobs:
         run: |
           cmake -S pc -B build-pc -G Ninja -DCMAKE_BUILD_TYPE=Release -DSOKOBAN_PC_STATIC=ON -DSOKOBAN_PC_WERROR=ON
           cmake --build build-pc
-          tests/run_tests.sh build-pc/sokoban.exe
+          bash tests/run_tests.sh build-pc/sokoban.exe
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
@@ -145,9 +145,11 @@ jobs:
         run: |
           python tools/make_sd_audio.py music
           mkdir -p package
+          # Les donnees d'abord : sous MSYS2, "package/SOKOBAN" est confondu avec "package/sokoban.exe"
+          # (le suffixe .exe est implicite) et cp refuse alors de creer le dossier.
+          cp -r SD_files/SOKOBAN package/SOKOBAN
           cp build-pc/sokoban.exe package/
           for dll in $(ldd build-pc/sokoban.exe | awk '/mingw64/ {print $3}'); do cp "$dll" package/; done
-          cp -r SD_files/SOKOBAN package/SOKOBAN
           cp LICENSE CREDITS.md pc/LISEZMOI.txt package/
           cp -r THIRD_PARTY package/
           (cd package && zip -r ../sokoban-pc-${{ matrix.name }}.zip .)
